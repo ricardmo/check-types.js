@@ -25,6 +25,8 @@
         isDate: isDate,
         verifyFunction: verifyFunction,
         isFunction: isFunction,
+        verifyWebUrl: verifyWebUrl,
+        isWebUrl: isWebUrl,
         verifyUnemptyString: verifyUnemptyString,
         isUnemptyString:isUnemptyString,
         verifyString: verifyString,
@@ -44,6 +46,7 @@
         any: any
     };
 
+    wrapMaybeFunctions();
     exportFunctions();
 
     /**
@@ -310,6 +313,31 @@
     }
 
     /**
+     * Public function `verifyWebUrl`.
+     *
+     * Throws an exception unless something is an HTTP or HTTPS URL.
+     *
+     * @param thing              The thing to test.
+     * @param [message] {string} An optional error message
+     *                           to set on the thrown Error.
+     */
+    function verifyWebUrl (thing, message) {
+        verify(isWebUrl, [thing], message, 'Invalid URL');
+    }
+
+    /**
+     * Public function `isWebUrl`.
+     *
+     * Returns `true` if something is an HTTP or HTTPS URL,
+     * `false` otherwise.
+     *
+     * @param thing          The thing to test.
+     */
+    function isWebUrl (thing) {
+        return isUnemptyString(thing) && /^https?:\/\/.+/.test(thing);
+    }
+
+    /**
      * Public function `verifyUnemptyString`.
      *
      * Throws an exception unless something is a non-empty string.
@@ -483,49 +511,37 @@
         return typeof thing === 'number' && isNaN(thing) === false;
     }
 
-    function exportFunctions () {
-        if (typeof define === 'function' && define.amd) {
-            define(function () {
-                return functions;
-            });
-        } else if (typeof module !== 'undefined' && module !== null) {
-            module.exports = functions;
-        } else {
-            globals.check = functions;
-        }
-    }
-
     /**
      * Public function `map`.
      *
-     * Returns the result of mapping each predicate to the corresponding
-     * object's property. Similar to `quacksLike` but takes a schema of
-     * predicate functions instead of a *duck* and returns the result of
-     * each predicate instead of a boolean.
+     * Returns the results hash of mapping each predicate to the
+     * corresponding thing's property. Similar to `quacksLike` but
+     * with functions instead of values.
      *
-     * @param thing The thing to test.
-     * @param predicates The associative array of predicates to test
-     *                   against each of thing's corresponding property.
+     * @param things {object}     The things to test.
+     * @param predicates {object} The map of functions to call against
+     *                            the corresponding properties from `things`.
      */
-    function map (thing, predicates) {
+    function map (things, predicates) {
         var property, result = {}, predicate;
-        verifyObject(thing);
+        verifyObject(things);
         verifyObject(predicates);
 
         for (property in predicates) {
             if (predicates.hasOwnProperty(property)) {
                 predicate = predicates[property];
                 if (isFunction(predicate)) {
-                    result[property] = thing.hasOwnProperty(property) ?
-                        predicate(thing[property]) :
+                    result[property] = things.hasOwnProperty(property) ?
+                        predicate(things[property]) :
                         undefined;
                 } else if (isObject(predicate)) {
-                    result[property] = thing.hasOwnProperty(property) ?
-                        map(thing[property], predicate) :
+                    result[property] = things.hasOwnProperty(property) ?
+                        map(things[property], predicate) :
                         undefined;
                 }
             }
         }
+
         return result;
     }
 
@@ -534,15 +550,15 @@
      *
      * Returns the conjunction of all booleans in a hash.
      *
-     * @param mappedPredicates The hash of evaluated predicates
+     * @param predicateResults {object} The hash of evaluated predicates.
      */
-    function every (mappedPredicates) {
+    function every (predicateResults) {
         var property, value;
-        verifyObject(mappedPredicates);
+        verifyObject(predicateResults);
 
-        for (property in mappedPredicates) {
-            if (mappedPredicates.hasOwnProperty(property)) {
-                value = mappedPredicates[property];
+        for (property in predicateResults) {
+            if (predicateResults.hasOwnProperty(property)) {
+                value = predicateResults[property];
                 if (isObject(value) && !every(value)) {
                     return false;
                 } else if (!value) {
@@ -558,15 +574,15 @@
      *
      * Returns the disjunction of all booleans in a hash.
      *
-     * @param mappedPredicates The has of evaluated predicates
+     * @param predicateResults {object} The hash of evaluated predicates.
      */
-    function any (mappedPredicates) {
+    function any (predicateResults) {
         var property, value;
-        verifyObject(mappedPredicates);
+        verifyObject(predicateResults);
 
-        for (property in mappedPredicates) {
-            if (mappedPredicates.hasOwnProperty(property)) {
-                value = mappedPredicates[property];
+        for (property in predicateResults) {
+            if (predicateResults.hasOwnProperty(property)) {
+                value = predicateResults[property];
                 if (isObject(value) && any(value)) {
                     return true;
                 } else if (value === true) {
@@ -575,6 +591,41 @@
             }
         }
         return false;
+    }
+
+    function wrapMaybeFunctions () {
+        var property, fn;
+
+        functions.maybe = {};
+
+        for (property in functions) {
+            if (functions.hasOwnProperty(property)) {
+                fn = functions[property];
+                functions.maybe[property] = maybe(fn);
+            }
+        }
+
+        delete functions.maybe.maybe;
+    }
+
+    function maybe (predicate) {
+        return function() {
+            return arguments[0] === null || arguments[0] === undefined ?
+                true :
+                predicate.apply(null, arguments);
+        };
+    }
+
+    function exportFunctions () {
+        if (typeof define === 'function' && define.amd) {
+            define(function () {
+                return functions;
+            });
+        } else if (typeof module !== 'undefined' && module !== null) {
+            module.exports = functions;
+        } else {
+            globals.check = functions;
+        }
     }
 }(this));
 
